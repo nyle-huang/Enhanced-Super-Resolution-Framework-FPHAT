@@ -3,7 +3,7 @@
 This repository provides a **complete, research-oriented super-resolution (SR) framework** supporting both distortion-focused and perceptual-focused SR models.  
  It implements classic, GAN-based, transformer-based, and **my optimized model**, **FP-HAT (Frequency–Perceptual Enhanced HAT)**.
 
-FP-HAT is the primary contribution of this project and demonstrates my ability to **analyze, extend, and optimize state-of-the-art (SOTA) SR architectures**, similar to those evaluated in **NTIRE** and **CVPR** competitions.
+FP-HAT is the primary contribution of this project, similar to those evaluated in **NTIRE** and **CVPR** competitions.
 
 ---
 
