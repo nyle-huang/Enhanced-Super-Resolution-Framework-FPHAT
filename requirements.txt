@@ -1,0 +1,38 @@
+# Core scientific + utility packages
+numpy<2.0
+pillow
+opencv-python
+matplotlib
+imageio
+scikit-image
+pandas
+tqdm
+einops
+tabulate
+prettytable
+jsonlines
+requests
+pyyaml
+
+# PyTorch ecosystem
+torch>=2.2.0
+torchvision>=0.17.0
+torchaudio>=2.2.0
+
+# SR / metrics / config helpers
+timm
+pytorch-msssim
+yacs
+
+# Perceptual + IQA metrics (NTIRE-style)
+lpips
+clean-fid
+pyiqa
+open_clip_torch
+
+# Misc helpers used by IQA / CLIP models
+accelerate
+safetensors
+
+# OpenAI CLIP (used by some IQA models)
+git+https://github.com/openai/CLIP.git
