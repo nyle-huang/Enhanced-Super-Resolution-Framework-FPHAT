@@ -233,11 +233,7 @@ def srcnn_test():
 
 
 def esrgan_train():
-    """
-    Train original ESRGAN (RRDBNet with internal x4 upsampling).
-    Uses ESRGANDataset: LR (small) -> G -> HR (big).
-    Loss = pixel L1 + perceptual L1 + adversarial BCE.
-    """
+
     os.makedirs(args.checkpoints, exist_ok=True)
     os.makedirs(args.outputs, exist_ok=True)
 
@@ -547,15 +543,7 @@ def esrgan_train():
 
 
 def esrgan_test():
-    """
-    Inference for original ESRGAN (RRDBNet with internal x4 upsampling).
 
-    Expects:
-    - args.test_lr: directory containing LR test images (e.g., 512x512 if HR is 2048x2048)
-    - args.checkpoint: directory containing 'esrgan_checkpoint.pth.tar'
-    - args.outputs: directory to save SR results
-    - global SCALE (e.g., 4) or args.scale used for naming
-    """
     os.makedirs(args.outputs, exist_ok=True)
 
     # -------------------------
@@ -621,11 +609,7 @@ def esrgan_test():
 
 
 def hat_train():
-    """
-        Train HATSRNet (Hybrid Attention Transformer) with the same pipeline as PFT-SR:
-        LR (small) -> HATSRNet (x4) -> HR (big).
-        Validation PSNR uses NTIRE-style Y-channel PSNR.
-        """
+
     os.makedirs(args.checkpoints, exist_ok=True)
     os.makedirs(args.outputs, exist_ok=True)
 
@@ -815,12 +799,7 @@ def hat_train():
 
 
 def hat_test():
-    """
-        Inference for HATSRNet:
-        - Loads best HAT checkpoint from args.checkpoints/hat_checkpoint.pth.tar
-        - Reads LR images from args.test_lr
-        - Saves SR images to args.outputs/hat_x4/
-        """
+
     model = HATSRNet(
         scale=SCALE,
         num_in_ch=3,
@@ -880,18 +859,14 @@ def hat_test():
 
 
 def fp_hat_train():
-    """
-        Train HATSRNet (Hybrid Attention Transformer) with the same pipeline as PFT-SR:
-        LR (small) -> HATSRNet (x4) -> HR (big).
-        Validation PSNR uses NTIRE-style Y-channel PSNR.
-        """
+
     os.makedirs(args.checkpoints, exist_ok=True)
     os.makedirs(args.outputs, exist_ok=True)
 
     lambda_rgb_stage2 = 0.3
     lambda_y_stage2 = 0.3
-    lambda_grad_stage2 = 0.1
-    lambda_perc_stage2 = 0.01
+    lambda_grad_stage2 = 0.08
+    lambda_perc_stage2 = 0.04
 
     train_dataset = SRDataset(
         lr_dir=args.train_lr,
@@ -1160,12 +1135,7 @@ def fp_hat_train():
 
 
 def fp_hat_test():
-    """
-        Inference for HATSRNet:
-        - Loads best HAT checkpoint from args.checkpoints/hat_checkpoint.pth.tar
-        - Reads LR images from args.test_lr
-        - Saves SR images to args.outputs/hat_x4/
-        """
+
     model = HATSRNet(
         scale=SCALE,
         num_in_ch=3,

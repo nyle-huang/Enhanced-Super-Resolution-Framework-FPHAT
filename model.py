@@ -8,10 +8,7 @@ from torchvision import models
 #                              HELPER FUNCTIONS
 # ===============================================================================
 def window_partition(x, window_size):
-    """
-    Partition feature map into non-overlapping windows.
-    Used in HAT and can be reused here if needed.
-    """
+
     B, C, H, W = x.shape
     x = x.view(B, C, H // window_size, window_size, W // window_size, window_size)
     windows = x.permute(0, 2, 4, 1, 3, 5).contiguous()
@@ -23,7 +20,6 @@ def window_partition(x, window_size):
 #                   HAT
 # ---------------------------------------
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) for regularization."""
 
     def __init__(self, drop_prob=0.0):
         super().__init__()
@@ -41,9 +37,7 @@ class DropPath(nn.Module):
 
 
 class LayerNorm2d(nn.Module):
-    """
-    LayerNorm over channels for BCHW tensors.
-    """
+
     def __init__(self, num_channels, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(1, num_channels, 1, 1))
@@ -59,10 +53,7 @@ class LayerNorm2d(nn.Module):
 
 
 class ChannelAttention(nn.Module):
-    """
-    Squeeze-and-excitation style channel attention.
-    This is the "hybrid" part combined with window self-attention.
-    """
+
     def __init__(self, dim, reduction=4):
         super().__init__()
         hidden = max(dim // reduction, 4)
@@ -79,15 +70,7 @@ class ChannelAttention(nn.Module):
 
 
 def window_partition_for_hat(x, window_size):
-    """
-    Args:
-        x: tensor of shape [B, C, H, W]
-        window_size: int, window size (ws)
 
-    Returns:
-        windows: [B * nH * nW, C, window_size, window_size]
-        meta: (B, nH, nW) for possible debugging/use
-    """
     B, C, H, W = x.shape
     assert H % window_size == 0 and W % window_size == 0, \
         f"H={H}, W={W} must be divisible by window_size={window_size}"
@@ -106,17 +89,7 @@ def window_partition_for_hat(x, window_size):
 
 
 def window_reverse(windows, window_size, B, H, W):
-    """
-    Reverse of window_partition.
 
-    Args:
-        windows: [B * nH * nW, C, window_size, window_size]
-        window_size: int
-        B, H, W: original image batch size and spatial dimensions
-
-    Returns:
-        x: [B, C, H, W]
-    """
     C = windows.shape[1]
     nH = H // window_size
     nW = W // window_size
@@ -132,10 +105,7 @@ def window_reverse(windows, window_size, B, H, W):
 
 
 class WindowAttention(nn.Module):
-    """
-    Window-based multi-head self-attention with learnable relative position bias.
-    Uses the same window partitioning as PFT-SR.
-    """
+
     def __init__(self, dim, window_size=8, num_heads=6):
         super().__init__()
         self.dim = dim
@@ -212,9 +182,7 @@ class WindowAttention(nn.Module):
 
 
 class HATMLP(nn.Module):
-    """
-    Conv-MLP used inside HAT transformer blocks.
-    """
+
     def __init__(self, dim, mlp_ratio=2.0):
         super().__init__()
         hidden_dim = int(dim * mlp_ratio)
@@ -231,11 +199,7 @@ class HATMLP(nn.Module):
 
 
 class HATBlock(nn.Module):
-    """
-    One HAT block:
-      x -> LN2d -> WindowAttention -> DropPath -> +
-         -> LN2d -> MLP -> ChannelAttention -> DropPath -> +
-    """
+
     def __init__(self,
                  dim,
                  window_size=8,
@@ -264,9 +228,7 @@ class HATBlock(nn.Module):
 
 
 class HATGroup(nn.Module):
-    """
-    Residual group of multiple HAT blocks with a conv at the end.
-    """
+
     def __init__(self,
                  dim,
                  depth,
@@ -290,14 +252,7 @@ class HATGroup(nn.Module):
 
 
 class HATSRNet(nn.Module):
-    """
-    Hybrid Attention Transformer for Single Image Super-Resolution.
 
-    - Shallow conv
-    - Several HATGroups (transformer body)
-    - Conv fusion
-    - PixelShuffle x4 upsampling
-    """
     def __init__(self,
                  scale=4,
                  num_in_ch=3,
@@ -346,9 +301,7 @@ class HATSRNet(nn.Module):
         self.conv_last = nn.Conv2d(dim, num_out_ch, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x):
-        """
-        x: [B, 3, H, W] in [0,1]
-        """
+
         B, C, H, W = x.shape
         ws = self.window_size
 
@@ -385,10 +338,7 @@ class HATSRNet(nn.Module):
 #                 ESRGAN
 # ---------------------------------------
 class ResidualDenseBlock(nn.Module):
-    """
-    ESRGAN Residual Dense Block (RDB) with 5 conv layers.
-    Keeps spatial size, input/output channels = nf.
-    """
+
     def __init__(self, nf=64, gc=32):
         super().__init__()
         self.gc = gc
@@ -413,10 +363,7 @@ class ResidualDenseBlock(nn.Module):
 
 
 class RRDB(nn.Module):
-    """
-    Residual-in-Residual Dense Block (RRDB):
-    3 RDBs with outer residual connection.
-    """
+
     def __init__(self, nf=64, gc=32):
         super().__init__()
         self.rdb1 = ResidualDenseBlock(nf, gc)
@@ -431,12 +378,7 @@ class RRDB(nn.Module):
 
 
 class ESRGANGenerator(nn.Module):
-    """
-    Original-style ESRGAN generator (RRDBNet) with internal x4 upsampling.
 
-    Input: LR image (e.g. 64x64)
-    Output: HR image (e.g. 256x256)
-    """
     def __init__(self, in_nc=3, out_nc=3, nf=64, nb=23, gc=32, scale=4):
         super().__init__()
         self.scale = scale
@@ -481,10 +423,7 @@ class ESRGANGenerator(nn.Module):
 
 
 class ESRGANDiscriminator(nn.Module):
-    """
-    PatchGAN-style discriminator for ESRGAN.
-    Expects HR patches (e.g., 128x128 or 192x192).
-    """
+
     def __init__(self, in_nc=3, base_nf=64):
         super().__init__()
         nf = base_nf
@@ -530,10 +469,7 @@ class ESRGANDiscriminator(nn.Module):
 
 
 class VGGFeatureExtractor(nn.Module):
-    """
-    Perceptual feature extractor using VGG19 (ImageNet pretrained).
-    Default: features up to conv5_4 (layer 35).
-    """
+
     def __init__(self, layer_index=35, use_input_norm=True):
         super().__init__()
         vgg = models.vgg19(weights=models.VGG19_Weights.IMAGENET1K_V1).features
@@ -554,19 +490,10 @@ class VGGFeatureExtractor(nn.Module):
         return self.features(x)
 
 
-
 # ---------------------------------------
 #                 SRCNN
 # ---------------------------------------
 class SRCNN(nn.Module):
-    """
-    Simple SRCNN for RGB images.
-    Original paper uses Y channel only; here we use 3 channels for simplicity.
-    Structure:
-      Conv1: 9x9, 3 -> 64, ReLU
-      Conv2: 1x1, 64 -> 32, ReLU
-      Conv3: 5x5, 32 -> 3
-    """
 
     def __init__(self):
         super().__init__()

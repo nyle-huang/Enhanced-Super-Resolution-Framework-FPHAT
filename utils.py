@@ -27,12 +27,7 @@ def calc_psnr(pred: torch.Tensor,
 # ------------------------------------------------------------
 
 def rgb_to_y_channel(img: torch.Tensor) -> torch.Tensor:
-    """
-    Convert RGB image(s) in [0,1] to Y (luma) using BT.601-ish weights.
 
-    img: [3,H,W] or [B,3,H,W]
-    returns: [1,H,W] or [B,1,H,W]
-    """
     if img.dim() == 3:
         # [3,H,W]
         assert img.size(0) == 3, f"Expected [3,H,W], got {img.shape}"
@@ -55,9 +50,7 @@ def rgb_to_y_channel(img: torch.Tensor) -> torch.Tensor:
 
 
 def shave_border(img: torch.Tensor, shave: int = 4) -> torch.Tensor:
-    """
-    Crop a border from all sides: [..., H, W] -> [..., H-2*shave, W-2*shave].
-    """
+
     if shave <= 0:
         return img
     return img[..., shave:-shave, shave:-shave]
@@ -71,12 +64,7 @@ def calc_psnr_y_ntire(pred: torch.Tensor,
                       target: torch.Tensor,
                       max_pixel: float = 1.0,
                       shave: int = 4) -> float:
-    """
-    NTIRE-style PSNR on Y channel:
-      - convert RGB -> Y
-      - shave border
-      - compute PSNR on Y
-    """
+
     assert pred.shape == target.shape, \
         f"Shape mismatch: pred {pred.shape}, target {target.shape}"
 
@@ -97,9 +85,7 @@ def _gaussian_window(window_size: int,
                      channels: int,
                      device,
                      dtype):
-    """
-    2D normalized Gaussian window used by SSIM.
-    """
+
     coords = torch.arange(window_size, dtype=dtype, device=device)
     coords = coords - window_size // 2
 
@@ -122,12 +108,7 @@ def calc_ssim_y_ntire(pred: torch.Tensor,
                       window_size: int = 11,
                       sigma: float = 1.5,
                       shave: int = 4) -> float:
-    """
-    NTIRE-style SSIM on Y channel:
-      - convert RGB -> Y
-      - shave border
-      - compute single-channel SSIM
-    """
+
     assert pred.shape == target.shape, \
         f"Shape mismatch: pred {pred.shape}, target {target.shape}"
 
@@ -191,10 +172,7 @@ def compute_ntire_perceptual_score(lpips: float,
                                    maniqa: float,
                                    musiq: float,
                                    niqe: float) -> float:
-    """
-    Combine six metrics into a single NTIRE-style perceptual score.
-    Higher is better.
-    """
+
     # Lower is better for lpips and dists
     term_lpips = 1.0 - lpips
     term_dists = 1.0 - dists
@@ -214,10 +192,7 @@ def compute_ntire_perceptual_score(lpips: float,
 def eval_restoration_metrics(pred: torch.Tensor,
                              target: torch.Tensor,
                              shave: int = 4) -> (float, float):
-    """
-    Convenience wrapper:
-      returns (PSNR_Y, SSIM_Y) with NTIRE-style border crop.
-    """
+
     psnr_y = calc_psnr_y_ntire(pred, target, max_pixel=1.0, shave=shave)
     ssim_y = calc_ssim_y_ntire(pred, target, max_val=1.0, shave=shave)
     return psnr_y, ssim_y
@@ -237,10 +212,7 @@ _niqe_metric = None
 
 
 def init_ntire_metrics(device: torch.device):
-    """
-    Create / cache all pyiqa metric objects on the given device.
-    Call once before using compute_ntire_metrics_for_pair.
-    """
+
     global _lpips_metric, _dists_metric, _clip_iqa_metric
     global _maniqa_metric, _musiq_metric, _niqe_metric
 
@@ -278,10 +250,7 @@ def init_ntire_metrics(device: torch.device):
 def compute_ntire_metrics_for_pair(sr: torch.Tensor,
                                    hr: torch.Tensor,
                                    device: torch.device = None):
-    """
-    Compute (lpips, dists, clip_iqa, maniqa, musiq, niqe)
-    for a single SR–HR pair in [0,1].
-    """
+
     # Move to device if provided
     if device is not None:
         sr = sr.to(device)
