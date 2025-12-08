@@ -220,31 +220,44 @@ def init_ntire_metrics(device: torch.device):
         _lpips_metric = pyiqa.create_metric(
             "lpips", device=device, as_loss=False
         ).eval()
+        # Disable strict input check
+        if hasattr(_lpips_metric, "is_valid_input"):
+            _lpips_metric.is_valid_input = lambda *args, **kwargs: None
 
     if _dists_metric is None:
         _dists_metric = pyiqa.create_metric(
             "dists", device=device, as_loss=False
         ).eval()
+        if hasattr(_dists_metric, "is_valid_input"):
+            _dists_metric.is_valid_input = lambda *args, **kwargs: None
 
     if _clip_iqa_metric is None:
         _clip_iqa_metric = pyiqa.create_metric(
             "clipiqa", device=device, as_loss=False
         ).eval()
+        if hasattr(_clip_iqa_metric, "is_valid_input"):
+            _clip_iqa_metric.is_valid_input = lambda *args, **kwargs: None
 
     if _maniqa_metric is None:
         _maniqa_metric = pyiqa.create_metric(
             "maniqa", device=device, as_loss=False
         ).eval()
+        if hasattr(_maniqa_metric, "is_valid_input"):
+            _maniqa_metric.is_valid_input = lambda *args, **kwargs: None
 
     if _musiq_metric is None:
         _musiq_metric = pyiqa.create_metric(
             "musiq", device=device, as_loss=False
         ).eval()
+        if hasattr(_musiq_metric, "is_valid_input"):
+            _musiq_metric.is_valid_input = lambda *args, **kwargs: None
 
     if _niqe_metric is None:
         _niqe_metric = pyiqa.create_metric(
             "niqe", device=device, as_loss=False
         ).eval()
+        if hasattr(_niqe_metric, "is_valid_input"):
+            _niqe_metric.is_valid_input = lambda *args, **kwargs: None
 
 
 def compute_ntire_metrics_for_pair(sr: torch.Tensor,
@@ -262,6 +275,11 @@ def compute_ntire_metrics_for_pair(sr: torch.Tensor,
     else:
         sr_b = sr
         hr_b = hr
+    """
+    eps = 1e-6
+    sr_b = torch.clamp(sr_b, eps, 1.0 - eps)
+    hr_b = torch.clamp(hr_b, eps, 1.0 - eps)
+    """
 
     with torch.no_grad():
         lpips_val = float(_lpips_metric(sr_b, hr_b).item())

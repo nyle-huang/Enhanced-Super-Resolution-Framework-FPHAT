@@ -3,6 +3,7 @@ from torch.amp import autocast
 from torch.cuda.amp import GradScaler
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.nn.utils import clip_grad_norm_
 import time
 import csv
 
@@ -84,14 +85,18 @@ def srcnn_train():
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=1,
         shuffle=False,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
     )
 
     print(f"Train images: {len(train_dataset)}, Val images: {len(val_dataset)}")
@@ -109,7 +114,7 @@ def srcnn_train():
             optimizer.zero_grad()
 
             if use_amp:
-                with autocast(device_type=device.type, enabled=True):
+                with autocast(device_type=device.type, dtype=torch.bfloat16, enabled=True):
                     sr = model(lr)
                     loss = criterion(sr, hr)
                 scaler.scale(loss).backward()
@@ -228,6 +233,7 @@ def srcnn_test():
             name, _ = os.path.splitext(basename)
             out_path = os.path.join(out_dir, f"{name}_x{SCALE}.png")
             img_sr.save(out_path)
+            print(f"[SRCNN Test] Saved {out_path}")
 
     print(f"SRCNN test finished.")
 
@@ -260,14 +266,18 @@ def esrgan_train():
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=1,
         shuffle=False,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
     )
 
     print(f"[ESRGAN] Train images: {len(train_dataset)}, Val images: {len(val_dataset)}")
@@ -367,7 +377,7 @@ def esrgan_train():
             # =====================
             d_optimizer.zero_grad()
             if use_amp:
-                with autocast(device_type="cuda"):
+                with autocast(device_type="cuda", dtype=torch.bfloat16):
                     with torch.no_grad():
                         sr_detached = generator(lr)
 
@@ -406,7 +416,7 @@ def esrgan_train():
             # =====================
             g_optimizer.zero_grad()
             if use_amp:
-                with autocast(device_type="cuda"):
+                with autocast(device_type="cuda", dtype=torch.bfloat16):
                     sr = generator(lr)
 
                     # Pixel loss
@@ -634,14 +644,18 @@ def hat_train():
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=1,
         shuffle=False,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
     )
 
     print(f"[HAT] Train images: {len(train_dataset)}, Val images: {len(val_dataset)}")
@@ -661,7 +675,7 @@ def hat_train():
     ).to(device)
 
     criterion = nn.L1Loss()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.99))
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="max", factor=0.1, patience=10, threshold=1e-4
     )
@@ -708,16 +722,19 @@ def hat_train():
 
             optimizer.zero_grad()
             if use_amp:
-                with autocast(device_type=device.type, enabled=True):
+                with autocast(device_type=device.type, dtype=torch.bfloat16, enabled=True):
                     sr = model(lr)
                     loss = criterion(sr, hr)
                 scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 sr = model(lr)
                 loss = criterion(sr, hr)
                 loss.backward()
+                clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             running_loss += loss.item()
@@ -863,10 +880,12 @@ def fp_hat_train():
     os.makedirs(args.checkpoints, exist_ok=True)
     os.makedirs(args.outputs, exist_ok=True)
 
-    lambda_rgb_stage2 = 0.3
-    lambda_y_stage2 = 0.3
-    lambda_grad_stage2 = 0.08
-    lambda_perc_stage2 = 0.04
+    lambda_rgb_stage2 = 1.0
+    lambda_y_stage2 = 0.5
+    lambda_grad_stage2 = 0.1
+    lambda_perc_stage2 = 1.0
+    lambda_lpips_stage2 = 0.5
+    lambda_dists_stage2 = 0.5
 
     train_dataset = SRDataset(
         lr_dir=args.train_lr,
@@ -889,14 +908,18 @@ def fp_hat_train():
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=1,
         shuffle=False,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
     )
 
     print(f"[FPHAT] Train images: {len(train_dataset)}, Val images: {len(val_dataset)}")
@@ -921,9 +944,14 @@ def fp_hat_train():
     for p in vgg_feat.parameters():
         p.requires_grad = False
 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    lpips_loss = pyiqa.create_metric("lpips", device=device, as_loss=True)
+    dists_loss = pyiqa.create_metric("dists", device=device, as_loss=True)
+    lpips_loss.is_valid_input = lambda x: None
+    dists_loss.is_valid_input = lambda x: None
+
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.99))
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="max", factor=0.1, patience=10, threshold=1e-4
+        optimizer, mode="max", factor=0.5, patience=10, threshold=1e-4
     )
 
     init_ntire_metrics(device)
@@ -945,8 +973,6 @@ def fp_hat_train():
     log_path = os.path.join(log_dir, f"{args.model}_history.csv")
 
     checkpoint_path = os.path.join(args.checkpoints, "fphat_checkpoint.pth.tar")
-    best_psnr = 0.0
-    best_ntire = 0.0
     best_combined = -1e9
 
     # Resume if requested
@@ -957,8 +983,6 @@ def fp_hat_train():
         optimizer.load_state_dict(ckpt["optimizer_state"])
         if ckpt.get("scheduler_state") is not None:
             scheduler.load_state_dict(ckpt["scheduler_state"])
-        best_psnr = ckpt.get("best_psnr_y", 0.0)
-        best_ntire = ckpt.get("best_ntire", 0.0)
         best_combined = ckpt.get("best_combined", 0.0)
         print(f"** [FPHAT] Loaded previous best Combined = {best_combined:.3f} **")
 
@@ -967,18 +991,13 @@ def fp_hat_train():
         model.train()
         running_loss = 0.0
 
-        lambda_rgb = lambda_rgb_stage2
-        lambda_y = lambda_y_stage2
-        lambda_grad = lambda_grad_stage2
-        lambda_perc = lambda_perc_stage2
-
         for lr, hr in train_loader:
             lr = lr.to(device)
             hr = hr.to(device)
 
             optimizer.zero_grad()
             if use_amp:
-                with autocast(device_type=device.type, enabled=True):
+                with autocast(device_type=device.type, dtype=torch.bfloat16, enabled=True):
                     sr = model(lr)
 
                     # 1) RGB L1
@@ -999,12 +1018,26 @@ def fp_hat_train():
                     feat_sr = vgg_feat(sr)
                     loss_perc = F.l1_loss(feat_sr, feat_hr)
 
-                    loss = (
-                            lambda_rgb * loss_rgb +
-                            lambda_y * loss_y +
-                            lambda_grad * loss_grad +
-                            lambda_perc * loss_perc
-                    )
+                    # 5) Differentiable perceptual proxies
+                    eps = 1e-6
+                    sr_clamped = torch.clamp(sr, eps, 1.0 - eps)
+                    hr_clamped = torch.clamp(hr, eps, 1.0 - eps)
+
+                    loss_lpips = lpips_loss(sr_clamped, hr_clamped)
+                    loss_dists = dists_loss(sr_clamped, hr_clamped)
+
+                    if epoch > 20:
+                        loss = (
+                                lambda_rgb_stage2 * loss_rgb +
+                                lambda_y_stage2 * loss_y +
+                                lambda_grad_stage2 * loss_grad +
+                                lambda_perc_stage2 * loss_perc +
+                                lambda_lpips_stage2 * loss_lpips +
+                                lambda_dists_stage2 * loss_dists
+
+                        )
+                    else:
+                        loss = loss_rgb
 
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
@@ -1030,22 +1063,32 @@ def fp_hat_train():
                 feat_sr = vgg_feat(sr)
                 loss_perc = F.l1_loss(feat_sr, feat_hr)
 
-                loss = (
-                        lambda_rgb * loss_rgb +
-                        lambda_y * loss_y +
-                        lambda_grad * loss_grad +
-                        lambda_perc * loss_perc
-                )
+                # 5) Differentiable perceptual proxies
+                eps = 1e-6
+                sr_clamped = torch.clamp(sr, eps, 1.0 - eps)
+                hr_clamped = torch.clamp(hr, eps, 1.0 - eps)
+
+                loss_lpips = lpips_loss(sr_clamped, hr_clamped)
+                loss_dists = dists_loss(sr_clamped, hr_clamped)
+
+                if epoch > 20:
+                    loss = (
+                            lambda_rgb_stage2 * loss_rgb +
+                            lambda_y_stage2 * loss_y +
+                            lambda_grad_stage2 * loss_grad +
+                            lambda_perc_stage2 * loss_perc +
+                            lambda_lpips_stage2 * loss_lpips +
+                            lambda_dists_stage2 * loss_dists
+                    )
+                else:
+                    loss = loss_rgb
 
                 loss.backward()
                 optimizer.step()
 
             running_loss += loss.item()
 
-        print(f"[Debug] rgb={loss_rgb.item():.4f}, "
-              f"y={loss_y.item():.4f}, "
-              f"grad={loss_grad.item():.4f}, "
-              f"vgg={loss_perc.item():.4f}")
+        print(f"[DEBUG][Raw Loss Values][RGB: {loss_rgb}][Y: {loss_y}][Grad: {loss_grad}][Perc: {loss_perc}][LP: {loss_lpips}][DI:{loss_dists}]")
 
         avg_loss = running_loss / len(train_loader)
         print(f"[FPHAT][Epoch {epoch}] Train Loss: {avg_loss:.6f}")
@@ -1108,6 +1151,7 @@ def fp_hat_train():
                 row = [history[k][i] for k in header]
                 writer.writerow(row)
 
+        # scheduler.step(val_ntire_score)
         scheduler.step(combined_score)
 
         if combined_score > best_combined:
@@ -1212,7 +1256,7 @@ if __name__ == "__main__":
                         help="Learning rate.")
     parser.add_argument("--weight_decay", type=float, default=2e-4,
                         help="Weight decay to reduce overfitting.")
-    parser.add_argument("--num_workers", type=int, default=0,
+    parser.add_argument("--num_workers", type=int, default=12,
                         help="Add parallel dataloaders.")
     parser.add_argument("--checkpoints", type=str, default="checkpoints",
                         help="Path to save/load a checkpoint.")
